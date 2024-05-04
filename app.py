@@ -3,7 +3,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-#from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 import requests
 import schedule
@@ -49,39 +48,31 @@ def setTelegramMessageParams(subject, ffrom, body):
 # Fetch emails and send Telegram message
 def fetchEmailsAndSendMessage():
     global last_run_time
-    emailSearchQuery = f"after:{last_run_time.strftime('%Y/%m/%d')} is:unread"
-    
-    #print(emailSearchQuery)
-    
-    #last_run_time = datetime.now()
-    results = service.users().messages().list(userId='me', q=emailSearchQuery).execute()
-    messages = results.get('messages', [])
-    if messages:
-        for message in messages:
-            emailMessage = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
-            headers = emailMessage['payload']['headers']
-            for d in headers:
-                name = d['name']
-                if name == 'Subject':
-                    subject = d['value']
-                if name == 'From':
-                    ffrom = d['value']
-                if name.lower() == 'date':
-                    email_date = datetime.strptime(d['value'], "%a, %d %b %Y %H:%M:%S %z")
-                    #print("EMAILVAL: " + d['value'])
-                    #email_date = parsedate_to_datetime(d['value'])
-                    #email_date = email_date.replace(tzinfo=None)  # Remove the timezone information
-            
-            print(email_date)
-            print(last_run_time)
-            print(email_date<last_run_time)
-            
-            if email_date < last_run_time:
-                continue  # Skip this email if it was received before the last run time
-            body = emailMessage['snippet']
-            setTelegramMessageParams(subject, ffrom, body)
-            sendTelegramMessage(telegramMessage)
-    last_run_time = datetime.now(timezone(timedelta(hours=+0)))
+    try:
+        emailSearchQuery = f"after:{last_run_time.strftime('%Y/%m/%d')} is:unread"
+        results = service.users().messages().list(userId='me', q=emailSearchQuery).execute()
+        messages = results.get('messages', [])
+        if messages:
+            for message in messages:
+                emailMessage = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+                headers = emailMessage['payload']['headers']
+                for d in headers:
+                    name = d['name']
+                    if name == 'Subject':
+                        subject = d['value']
+                    if name == 'From':
+                        ffrom = d['value']
+                    if name.lower() == 'date':
+                        email_date = datetime.strptime(d['value'], "%a, %d %b %Y %H:%M:%S %z")
+
+                if email_date < last_run_time:
+                    continue  # Skip this email if it was received before the last run time
+                body = emailMessage['snippet']
+                setTelegramMessageParams(subject, ffrom, body)
+                sendTelegramMessage(telegramMessage)
+        last_run_time = datetime.now(timezone(timedelta(hours=+0)))
+    except:
+        print("err")
 
 # Send Telegram message
 def sendTelegramMessage(message):
@@ -95,8 +86,8 @@ def sendTelegramMessage(message):
 # Schedule the fetchEmailsAndSendMessage function to run every 5 minutes
 schedule.every(5).minutes.do(fetchEmailsAndSendMessage)
 
-fetchEmailsAndSendMessage()
-print(f"hey START APP")
+
+print(f"START APP GMAIL-BOT")
 # Run the scheduled tasks indefinitely
 while True:
     schedule.run_pending()
