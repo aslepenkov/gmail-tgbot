@@ -3,8 +3,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from email.utils import parsedate_to_datetime
-from datetime import datetime, timedelta
+#from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta, timezone
 import requests
 import schedule
 import time
@@ -19,7 +19,7 @@ tgId = config["Telegram"]["ID"]
 telegramBotToken = config["Telegram"]["BotToken"]
 
 # Constants
-last_run_time = datetime.now() - timedelta(days=1)
+last_run_time = datetime.now(timezone(timedelta(hours=+0))) - timedelta(days=1)
 telegramMessage = ""
 
 # Gmail API credentials
@@ -34,10 +34,11 @@ if not creds or not creds.valid:
         flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
         creds = flow.run_local_server(port=0)
     with open("token.json", "w") as token:
+        print(creds.to_json())
         token.write(creds.to_json())
 
 service = build("gmail", "v1", credentials=creds)
-
+print("service built succesfully")
 
 # Set up Telegram message parameters
 def setTelegramMessageParams(subject, ffrom, body):
@@ -49,7 +50,10 @@ def setTelegramMessageParams(subject, ffrom, body):
 def fetchEmailsAndSendMessage():
     global last_run_time
     emailSearchQuery = f"after:{last_run_time.strftime('%Y/%m/%d')} is:unread"
-    current_run_time = datetime.now()
+    
+    #print(emailSearchQuery)
+    
+    #last_run_time = datetime.now()
     results = service.users().messages().list(userId='me', q=emailSearchQuery).execute()
     messages = results.get('messages', [])
     if messages:
@@ -63,41 +67,21 @@ def fetchEmailsAndSendMessage():
                 if name == 'From':
                     ffrom = d['value']
                 if name.lower() == 'date':
-                    email_date = parsedate_to_datetime(d['value'])
-                    email_date = email_date.replace(tzinfo=None)  # Remove the timezone information
+                    email_date = datetime.strptime(d['value'], "%a, %d %b %Y %H:%M:%S %z")
+                    #print("EMAILVAL: " + d['value'])
+                    #email_date = parsedate_to_datetime(d['value'])
+                    #email_date = email_date.replace(tzinfo=None)  # Remove the timezone information
+            
+            print(email_date)
+            print(last_run_time)
+            print(email_date<last_run_time)
+            
             if email_date < last_run_time:
                 continue  # Skip this email if it was received before the last run time
             body = emailMessage['snippet']
             setTelegramMessageParams(subject, ffrom, body)
             sendTelegramMessage(telegramMessage)
-    last_run_time = current_run_time  # Update last_run_time
-
-def fetchEmailsAndSendMessageold():
-    global last_run_time
-    emailSearchQuery = f"after:{last_run_time.strftime('%Y/%m/%d')} is:unread"
-    last_run_time = datetime.now()
-    results = service.users().messages().list(userId="me", q=emailSearchQuery).execute()
-    messages = results.get("messages", [])
-
-    if messages:
-        for message in messages:
-            emailMessage = (
-                service.users()
-                .messages()
-                .get(userId="me", id=message["id"], format="full")
-                .execute()
-            )
-            headers = emailMessage["payload"]["headers"]
-            for d in headers:
-                name = d["name"]
-                if name == "Subject":
-                    subject = d["value"]
-                if name == "From":
-                    ffrom = d["value"]
-            body = emailMessage["snippet"]
-            setTelegramMessageParams(subject, ffrom, body)
-            sendTelegramMessage(telegramMessage)
-
+    last_run_time = datetime.now(timezone(timedelta(hours=+0)))
 
 # Send Telegram message
 def sendTelegramMessage(message):
@@ -112,7 +96,7 @@ def sendTelegramMessage(message):
 schedule.every(5).minutes.do(fetchEmailsAndSendMessage)
 
 fetchEmailsAndSendMessage()
-
+print(f"hey START APP")
 # Run the scheduled tasks indefinitely
 while True:
     schedule.run_pending()
